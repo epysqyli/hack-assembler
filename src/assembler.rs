@@ -1,12 +1,8 @@
 use crate::instruction::{Hackable, Instruction};
 use std::{collections::HashMap, fs};
 
-#[allow(dead_code)]
 pub struct Assembler {
     pub asm: Vec<String>,
-    pub asm_without_symbols: Vec<String>,
-    pub asm_without_labels: Vec<String>,
-    pub asm_without_variables: Vec<String>,
     symbols: HashMap<String, String>,
 }
 
@@ -14,9 +10,6 @@ impl Assembler {
     pub fn new(asm: Vec<String>) -> Self {
         Self {
             asm: asm,
-            asm_without_symbols: vec![],
-            asm_without_labels: vec![],
-            asm_without_variables: vec![],
             symbols: HashMap::from([
                 ("SP".to_string(), "0".to_string()),
                 ("LCL".to_string(), "1".to_string()),
@@ -59,9 +52,10 @@ impl Assembler {
     }
 
     pub fn compile(self: &Self) -> Result<Vec<String>, String> {
+        let asm_without_variables = self.pre_process();
         let mut hack_out: Vec<String> = vec![];
 
-        for op in &self.asm_without_variables {
+        for op in asm_without_variables {
             match Instruction::from(op.clone()) {
                 Some(inst) => match inst.to_hack() {
                     Ok(inst_as_hack) => hack_out.push(inst_as_hack),
@@ -74,36 +68,40 @@ impl Assembler {
         Ok(hack_out)
     }
 
-    pub fn pre_process(self: &mut Self) {
-        self.replace_symbols();
-        self.replace_labels();
-        self.replace_variables();
+    fn pre_process(self: &Self) -> Vec<String> {
+        self.replace_variables(self.replace_labels(self.replace_symbols()))
     }
 
     // Step 1
-    fn replace_symbols(self: &mut Self) {
+    fn replace_symbols(self: &Self) -> Vec<String> {
+        let mut asm_without_symbols: Vec<String> = vec![];
+
         for op in self.asm.iter() {
             if !op.starts_with('@') {
-                self.asm_without_symbols.push(op.clone());
+                asm_without_symbols.push(op.clone());
                 continue;
             }
 
             let (_, op_symbol) = op.split_at(1);
             match self.symbols.get(op_symbol) {
-                Some(symbol) => self.asm_without_symbols.push(format!("@{symbol}")),
-                None => self.asm_without_symbols.push(op.clone()),
+                Some(symbol) => asm_without_symbols.push(format!("@{symbol}")),
+                None => asm_without_symbols.push(op.clone()),
             }
         }
+
+        asm_without_symbols
     }
 
     // Step 2
     // TODO: labels have to be unique
     // TODO: non-existing labels cannot be referenced
-    fn replace_labels(self: &mut Self) {
+    fn replace_labels(self: &Self, asm_without_symbols: Vec<String>) -> Vec<String> {
+        let mut asm_without_labels: Vec<String> = vec![];
+
         let mut label_to_linenum: HashMap<String, String> = HashMap::new();
 
         let mut labels_count = 0;
-        for (line_num, op) in self.asm_without_symbols.iter().enumerate() {
+        for (line_num, op) in asm_without_symbols.iter().enumerate() {
             if !op.starts_with('(') && !op.ends_with(')') {
                 continue;
             }
@@ -113,56 +111,61 @@ impl Assembler {
             labels_count += 1;
         }
 
-        for op in self.asm_without_symbols.iter() {
+        for op in asm_without_symbols.iter() {
             if op.starts_with('(') {
                 continue;
             }
 
             if !op.starts_with('@') {
-                self.asm_without_labels.push(op.clone());
+                asm_without_labels.push(op.clone());
                 continue;
             }
 
             let (_, op_symbol) = op.split_at(1);
             match label_to_linenum.get(op_symbol) {
-                Some(symbol) => self.asm_without_labels.push(format!("@{symbol}")),
-                None => self.asm_without_labels.push(op.clone()),
+                Some(symbol) => asm_without_labels.push(format!("@{symbol}")),
+                None => asm_without_labels.push(op.clone()),
             }
         }
+
+        asm_without_labels
     }
 
     // Step 3
     // TODO: can only allocate between @16 and @16383
-    fn replace_variables(self: &mut Self) {
+    fn replace_variables(self: &Self, asm_without_labels: Vec<String>) -> Vec<String> {
         let mut vars: Vec<(String, String)> = vec![];
+        let mut asm_without_variables: Vec<String> = vec![];
 
-        for op in self.asm_without_labels.iter() {
+        for op in asm_without_labels.iter() {
             if !op.starts_with('@') {
-                self.asm_without_variables.push(op.clone());
+                asm_without_variables.push(op.clone());
                 continue;
             }
 
             let (_, op_symbol) = op.split_at(1);
             if op_symbol.parse::<u16>().is_ok() {
-                self.asm_without_variables.push(op.clone());
+                asm_without_variables.push(op.clone());
                 continue;
             }
 
             if vars.is_empty() {
                 vars.push((op_symbol.to_string(), "16".to_string()));
-                self.asm_without_variables.push(format!("@16"));
+                asm_without_variables.push(format!("@16"));
                 continue;
             }
 
             match vars.iter().find(|var| var.0 == op_symbol) {
-                Some(v) => self.asm_without_variables.push(format!("@{}", v.1)),
+                Some(v) => asm_without_variables.push(format!("@{}", v.1)),
                 None => {
                     let next_addr = vars.last().unwrap().1.parse::<u16>().unwrap() + 1;
                     vars.push((op_symbol.to_string(), format!("{}", next_addr)));
-                    self.asm_without_variables.push(format!("@{}", next_addr))
+                    asm_without_variables.push(format!("@{}", next_addr))
                 }
             }
         }
+
+        asm_without_variables
     }
 }
 
@@ -172,7 +175,7 @@ mod tests {
 
     #[test]
     fn default_symbols_are_replaced_correctly() {
-        let mut assembler = Assembler::new(vec![
+        let assembler = Assembler::new(vec![
             "@R0".to_string(),
             "D=M".to_string(),
             "(TEST_LABEL)".to_string(),
@@ -186,7 +189,7 @@ mod tests {
                 "D=M".to_string(),
                 "(TEST_LABEL)".to_string()
             ],
-            assembler.asm_without_symbols
+            assembler.replace_symbols()
         );
     }
 
@@ -227,11 +230,8 @@ mod tests {
             "0;JMP".to_string(),
         ];
 
-        let mut assembler = Assembler::new(asm);
-        assembler.replace_symbols();
-        assembler.replace_labels();
-
-        assert_eq!(processed_asm, assembler.asm_without_labels);
+        let assembler = Assembler::new(asm);
+        assert_eq!(processed_asm, assembler.replace_labels(assembler.replace_symbols()));
     }
 
     #[test]
@@ -279,12 +279,8 @@ mod tests {
             "0;JMP".to_string(),
         ];
 
-        let mut assembler = Assembler::new(asm);
-        assembler.replace_symbols();
-        assembler.replace_labels();
-        assembler.replace_variables();
-
-        assert_eq!(processed_asm, assembler.asm_without_variables);
+        let assembler = Assembler::new(asm);
+        assert_eq!(processed_asm, assembler.pre_process());
     }
 
     #[test]
@@ -332,9 +328,7 @@ mod tests {
             "1110101010000111".to_string(),
         ];
 
-        let mut assembler = Assembler::new(asm);
-        assembler.pre_process();
-
+        let assembler = Assembler::new(asm);
         assert_eq!(expected, assembler.compile().unwrap());
     }
 }
