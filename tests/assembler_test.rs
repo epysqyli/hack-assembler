@@ -1,3 +1,5 @@
+use std::fs;
+
 use hack_assembler::assembler;
 
 #[test]
@@ -56,4 +58,17 @@ fn asm_file_is_parsed_correctly() {
         .iter()
         .enumerate()
         .for_each(|(line_num, instr)| assert_eq!(expected[line_num], instr));
+}
+
+#[test]
+fn compilation_outputs_expected_hack_program() {
+    let expected_hack: Vec<String> = fs::read_to_string("tests/fixtures/mult.hack")
+        .unwrap()
+        .lines()
+        .map(|l| l.to_string())
+        .collect();
+
+    let assembler = assembler::Assembler::from_file("tests/fixtures/mult.asm").unwrap();
+
+    assert_eq!(expected_hack, assembler.compile().unwrap());
 }

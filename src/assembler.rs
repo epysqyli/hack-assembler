@@ -8,33 +8,35 @@ pub struct Assembler {
 
 impl Assembler {
     pub fn new(asm: Vec<String>) -> Self {
+        let predefined_symbols = HashMap::from([
+            ("SP".to_string(), "0".to_string()),
+            ("LCL".to_string(), "1".to_string()),
+            ("ARG".to_string(), "2".to_string()),
+            ("THIS".to_string(), "3".to_string()),
+            ("THAT".to_string(), "4".to_string()),
+            ("R0".to_string(), "0".to_string()),
+            ("R1".to_string(), "1".to_string()),
+            ("R2".to_string(), "2".to_string()),
+            ("R3".to_string(), "3".to_string()),
+            ("R4".to_string(), "4".to_string()),
+            ("R5".to_string(), "5".to_string()),
+            ("R6".to_string(), "6".to_string()),
+            ("R7".to_string(), "7".to_string()),
+            ("R8".to_string(), "8".to_string()),
+            ("R9".to_string(), "9".to_string()),
+            ("R10".to_string(), "10".to_string()),
+            ("R11".to_string(), "11".to_string()),
+            ("R12".to_string(), "12".to_string()),
+            ("R13".to_string(), "13".to_string()),
+            ("R14".to_string(), "14".to_string()),
+            ("R15".to_string(), "15".to_string()),
+            ("SCREEN".to_string(), "16384".to_string()),
+            ("KBD".to_string(), "24576".to_string()),
+        ]);
+
         Self {
             asm: asm,
-            symbols: HashMap::from([
-                ("SP".to_string(), "0".to_string()),
-                ("LCL".to_string(), "1".to_string()),
-                ("ARG".to_string(), "2".to_string()),
-                ("THIS".to_string(), "3".to_string()),
-                ("THAT".to_string(), "4".to_string()),
-                ("R0".to_string(), "0".to_string()),
-                ("R1".to_string(), "1".to_string()),
-                ("R2".to_string(), "2".to_string()),
-                ("R3".to_string(), "3".to_string()),
-                ("R4".to_string(), "4".to_string()),
-                ("R5".to_string(), "5".to_string()),
-                ("R6".to_string(), "6".to_string()),
-                ("R7".to_string(), "7".to_string()),
-                ("R8".to_string(), "8".to_string()),
-                ("R9".to_string(), "9".to_string()),
-                ("R10".to_string(), "10".to_string()),
-                ("R11".to_string(), "11".to_string()),
-                ("R12".to_string(), "12".to_string()),
-                ("R13".to_string(), "13".to_string()),
-                ("R14".to_string(), "14".to_string()),
-                ("R15".to_string(), "15".to_string()),
-                ("SCREEN".to_string(), "16384".to_string()),
-                ("KBD".to_string(), "24576".to_string()),
-            ]),
+            symbols: predefined_symbols,
         }
     }
 
@@ -52,7 +54,7 @@ impl Assembler {
     }
 
     pub fn compile(self: &Self) -> Result<Vec<String>, String> {
-        let asm_without_variables = self.pre_process();
+        let asm_without_variables = self.pre_process()?;
         let mut hack_out: Vec<String> = vec![];
 
         for op in asm_without_variables {
@@ -68,11 +70,14 @@ impl Assembler {
         Ok(hack_out)
     }
 
-    fn pre_process(self: &Self) -> Vec<String> {
-        self.replace_variables(self.replace_labels(self.replace_symbols()))
+    fn pre_process(self: &Self) -> Result<Vec<String>, String> {
+        let asm_no_symbols = self.replace_symbols();
+        let asm_no_labels = self.replace_labels(asm_no_symbols)?;
+        let asm_no_vars = self.replace_variables(asm_no_labels)?;
+
+        Ok(asm_no_vars)
     }
 
-    // Step 1
     fn replace_symbols(self: &Self) -> Vec<String> {
         let mut asm_without_symbols: Vec<String> = vec![];
 
@@ -92,12 +97,11 @@ impl Assembler {
         asm_without_symbols
     }
 
-    // Step 2
-    // TODO: labels have to be unique
-    // TODO: non-existing labels cannot be referenced
-    fn replace_labels(self: &Self, asm_without_symbols: Vec<String>) -> Vec<String> {
+    fn replace_labels(
+        self: &Self,
+        asm_without_symbols: Vec<String>,
+    ) -> Result<Vec<String>, String> {
         let mut asm_without_labels: Vec<String> = vec![];
-
         let mut label_to_linenum: HashMap<String, String> = HashMap::new();
 
         let mut labels_count = 0;
@@ -107,8 +111,14 @@ impl Assembler {
             }
 
             let label = op.trim_start_matches('(').trim_end_matches(')');
-            label_to_linenum.insert(label.to_string(), (line_num - labels_count).to_string());
-            labels_count += 1;
+            match label_to_linenum.get(label) {
+                Some(_) => return Err(format!("{} label is duplicate", label)),
+                None => {
+                    label_to_linenum
+                        .insert(label.to_string(), (line_num - labels_count).to_string());
+                    labels_count += 1;
+                }
+            }
         }
 
         for op in asm_without_symbols.iter() {
@@ -128,12 +138,13 @@ impl Assembler {
             }
         }
 
-        asm_without_labels
+        Ok(asm_without_labels)
     }
 
-    // Step 3
-    // TODO: can only allocate between @16 and @16383
-    fn replace_variables(self: &Self, asm_without_labels: Vec<String>) -> Vec<String> {
+    fn replace_variables(
+        self: &Self,
+        asm_without_labels: Vec<String>,
+    ) -> Result<Vec<String>, String> {
         let mut vars: Vec<(String, String)> = vec![];
         let mut asm_without_variables: Vec<String> = vec![];
 
@@ -165,7 +176,7 @@ impl Assembler {
             }
         }
 
-        asm_without_variables
+        Ok(asm_without_variables)
     }
 }
 
@@ -231,7 +242,12 @@ mod tests {
         ];
 
         let assembler = Assembler::new(asm);
-        assert_eq!(processed_asm, assembler.replace_labels(assembler.replace_symbols()));
+        assert_eq!(
+            processed_asm,
+            assembler
+                .replace_labels(assembler.replace_symbols())
+                .unwrap()
+        );
     }
 
     #[test]
@@ -280,7 +296,20 @@ mod tests {
         ];
 
         let assembler = Assembler::new(asm);
-        assert_eq!(processed_asm, assembler.pre_process());
+        assert_eq!(processed_asm, assembler.pre_process().unwrap());
+    }
+
+    #[test]
+    fn duplicate_labels_are_not_allowed() {
+        let asm = vec!["(ZERO_OUTPUT)".to_string(), "(ZERO_OUTPUT)".to_string()];
+
+        let assembler = Assembler::new(asm);
+        assert_eq!(
+            "ZERO_OUTPUT label is duplicate",
+            assembler
+                .replace_labels(assembler.replace_symbols())
+                .unwrap_err()
+        );
     }
 
     #[test]
