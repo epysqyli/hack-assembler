@@ -1,4 +1,5 @@
-use crate::instruction::{Hackable, Instruction};
+use crate::instruction::asm::Instruction;
+use crate::instruction::hack::Hackable;
 use std::{collections::HashMap, fs};
 
 pub struct Assembler {
