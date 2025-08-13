@@ -29,10 +29,7 @@ impl Hackable for Instruction {
     fn to_hack(self: Self) -> Result<HackInstruction, String> {
         match self {
             Instruction::A(value) => match value.split_at(1).1.parse::<u16>() {
-                Ok(val) => match HackInstruction::from(format!("0{:015b}", val)) {
-					Ok(i) => Ok(i),
-					Err(e) => Err(e),
-				}
+                Ok(val) => HackInstruction::from(format!("0{:015b}", val)),
                 Err(e) => Err(e.to_string()),
             },
             Instruction::C(value) => {
