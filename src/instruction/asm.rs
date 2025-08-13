@@ -1,4 +1,4 @@
-use crate::instruction::hack::Hackable;
+use crate::instruction::hack::{Hackable, Instruction as HackInstruction};
 
 #[derive(PartialEq, Debug)]
 pub enum Instruction {
@@ -26,10 +26,13 @@ impl Instruction {
 }
 
 impl Hackable for Instruction {
-    fn to_hack(self: Self) -> Result<String, String> {
+    fn to_hack(self: Self) -> Result<HackInstruction, String> {
         match self {
             Instruction::A(value) => match value.split_at(1).1.parse::<u16>() {
-                Ok(val) => Ok(format!("0{:015b}", val).to_string()),
+                Ok(val) => match HackInstruction::from(format!("0{:015b}", val)) {
+					Ok(i) => Ok(i),
+					Err(e) => Err(e),
+				}
                 Err(e) => Err(e.to_string()),
             },
             Instruction::C(value) => {
@@ -151,7 +154,7 @@ impl Hackable for Instruction {
                 out[14] = jump_bits[1];
                 out[15] = jump_bits[2];
 
-                Ok(out.iter().collect())
+                Ok(HackInstruction::from(out.iter().collect())?)
             }
         }
     }
@@ -191,7 +194,7 @@ mod tests {
         asm_to_hack.insert("@64", "0000000001000000");
 
         asm_to_hack.iter().for_each(|(asm, hack)| {
-            assert_eq!(*hack, Instruction::A(asm.to_string()).to_hack().unwrap())
+            assert_eq!(*hack, Instruction::A(asm.to_string()).to_hack().unwrap().0)
         });
     }
 
@@ -203,7 +206,7 @@ mod tests {
         asm_to_hack.insert("D=M;JEQ", "1111110000010010");
 
         asm_to_hack.iter().for_each(|(asm, hack)| {
-            assert_eq!(*hack, Instruction::C(asm.to_string()).to_hack().unwrap())
+            assert_eq!(*hack, Instruction::C(asm.to_string()).to_hack().unwrap().0)
         });
     }
 
