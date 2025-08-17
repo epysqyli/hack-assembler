@@ -3,7 +3,7 @@ use crate::instruction::hack::Hackable;
 use std::{collections::HashMap, fs};
 
 pub struct Assembler {
-    pub asm: Vec<String>,
+    asm: Vec<String>,
     symbols: HashMap<String, String>,
 }
 
